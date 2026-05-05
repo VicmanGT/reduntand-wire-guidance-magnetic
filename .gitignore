@@ -1,0 +1,21 @@
+# Build artifacts
+Debug/
+Release/
+*.elf
+*.bin
+*.hex
+*.map
+*.o
+*.su
+*.d
+
+# Toolchain / IDE specific
+.settings/
+.launch
+*.launch
+bin/
+obj/
+
+# OS generated
+.DS_Store
+Thumbs.db
