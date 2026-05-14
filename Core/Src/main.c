@@ -24,7 +24,8 @@
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-
+#include "math.h"
+#include <stdlib.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -39,6 +40,11 @@
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
+#define SAMPLES 60
+#define DAC_CENTER 3102 // 2.5 V
+#define DAC_MAX 3722 // 2.5 V + 500mV = 3V
+#define PI 3.14159265f
+
 
 /* USER CODE END PM */
 
@@ -50,17 +56,22 @@ DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch2;
 
 TIM_HandleTypeDef htim2;
+TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
-uint16_t adc_buffer[2];
+volatile uint16_t adc_buffer[2];
 
 HAL_StatusTypeDef status;
+
 
 uint16_t sinewave[60] = {
 0x07ff,0x08cb,0x0994,0x0a5a,0x0b18,0x0bce,0x0c79,0x0d18,0x0da8,0x0e29,0x0e98,0x0ef4,0x0f3e,0x0f72,0x0f92,0x0f9d,
 0x0f92,0x0f72,0x0f3e,0x0ef4,0x0e98,0x0e29,0x0da8,0x0d18,0x0c79,0x0bce,0x0b18,0x0a5a,0x0994,0x08cb,0x07ff,0x0733,
 0x066a,0x05a4,0x04e6,0x0430,0x0385,0x02e6,0x0256,0x01d5,0x0166,0x010a,0x00c0,0x008c,0x006c,0x0061,0x006c,0x008c,
 0x00c0,0x010a,0x0166,0x01d5,0x0256,0x02e6,0x0385,0x0430,0x04e6,0x05a4,0x066a,0x0733};
+
+uint16_t sinewave_left[SAMPLES];
+uint16_t sinewave_right[SAMPLES];
 
 /* USER CODE END PV */
 
@@ -71,8 +82,13 @@ static void MX_DMA_Init(void);
 static void MX_ADC1_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_TIM2_Init(void);
+static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
-
+void GenerateLeftSineWave(uint16_t amplitude);
+void GenerateRightSineWave(uint16_t amplitude);
+float normalize_sensor0(uint16_t s0);
+float normalize_sensor1(uint16_t s1);
+int16_t calculate_error(uint16_t s0, uint16_t s1);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -113,10 +129,9 @@ int main(void)
   MX_ADC1_Init();
   MX_DAC1_Init();
   MX_TIM2_Init();
+  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
   //HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
-
-  HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, 2);
 
   status = HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, 2);
 
@@ -128,11 +143,16 @@ int main(void)
       Error_Handler();
     }
 
+  if (HAL_TIM_Base_Start_IT(&htim3) != HAL_OK)
+  {
+      Error_Handler();
+  }
+
 
     /*## Start DAC conversions ###############################################*/
       /* Start DAC wave generation */
     if (HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_2,
-                                (uint32_t *)sinewave,
+                                (uint32_t *)sinewave_right,
                                 60,
                                 DAC_ALIGN_12B_R
                                ) != HAL_OK)
@@ -367,6 +387,51 @@ static void MX_TIM2_Init(void)
 }
 
 /**
+  * @brief TIM3 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_TIM3_Init(void)
+{
+
+  /* USER CODE BEGIN TIM3_Init 0 */
+
+  /* USER CODE END TIM3_Init 0 */
+
+  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
+  TIM_MasterConfigTypeDef sMasterConfig = {0};
+
+  /* USER CODE BEGIN TIM3_Init 1 */
+
+  /* USER CODE END TIM3_Init 1 */
+  htim3.Instance = TIM3;
+  htim3.Init.Prescaler = 159;
+  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
+  htim3.Init.Period = 99;
+  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
+  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
+  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
+  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  sMasterConfig.MasterOutputTrigger = TIM_TRGO_RESET;
+  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
+  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN TIM3_Init 2 */
+
+  /* USER CODE END TIM3_Init 2 */
+
+}
+
+/**
   * Enable DMA controller clock
   */
 static void MX_DMA_Init(void)
@@ -406,7 +471,79 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
+void GenerateLeftSineWave(uint16_t amplitude)
+{
+    for(int i = 0; i < SAMPLES; i++)
+    {
+        float angle = 2.0f * PI * i / SAMPLES;
 
+        float value = DAC_CENTER + amplitude * sinf(angle);
+
+        if(value > DAC_MAX)
+            value = DAC_MAX;
+
+        if(value < 0)
+            value = 0;
+
+        sinewave_left[i] = (uint16_t)value;
+    }
+}
+
+void GenerateRightSineWave(uint16_t amplitude)
+{
+    for(int i = 0; i < SAMPLES; i++)
+    {
+        float angle = 2.0f * PI * i / SAMPLES;
+
+        float value = DAC_CENTER + amplitude * sinf(angle);
+
+        if(value > DAC_MAX)
+            value = DAC_MAX;
+
+        if(value < 0)
+            value = 0;
+
+        sinewave_right[i] = (uint16_t)value;
+    }
+}
+
+float normalize_sensor0(uint16_t s0)
+{
+    return ((float)s0 - 600.0f) / (4000.0f - 600.0f);
+}
+
+float normalize_sensor1(uint16_t s1)
+{
+    return (2500.0f - (float)s1) / (2500.0f - 10.0f);
+}
+
+int16_t calculate_error(uint16_t s0, uint16_t s1)
+{
+	// magnetic tape is there
+	if (s1 > 2200 ) return 2000 - s0;
+		// if diff0 < 0: magnetic tape to the left
+		// if diff1 > 1: magnetic tape to the right
+	else return 9999;
+}
+
+void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
+{
+    if(htim->Instance == TIM3)
+    {
+        uint16_t s0 = adc_buffer[0];
+        uint16_t s1 = adc_buffer[1];
+		// if error < 0: magnetic tape to the left
+		// if error > 1: magnetic tape to the right
+        int16_t error = calculate_error(s0, s1);
+        if (error == 9999) {
+        	GenerateRightSineWave(0);
+        	GenerateLeftSineWave(0);
+        }
+        if (error < 0){
+        	GenerateRightSineWave(abs(error) * 0.3);
+        }
+    }
+}
 /* USER CODE END 4 */
 
 /**
