@@ -54,6 +54,7 @@ DMA_HandleTypeDef hdma_adc1;
 
 DAC_HandleTypeDef hdac1;
 DMA_HandleTypeDef hdma_dac1_ch2;
+DMA_HandleTypeDef hdma_dac1_ch1;
 
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
@@ -151,15 +152,29 @@ int main(void)
 
     /*## Start DAC conversions ###############################################*/
       /* Start DAC wave generation */
+
     if (HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_2,
                                 (uint32_t *)sinewave_right,
                                 60,
                                 DAC_ALIGN_12B_R
                                ) != HAL_OK)
           {
-            /* DAC conversion start error */
+            // DAC conversion start error
             Error_Handler();
           }
+
+    if (HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1,
+                                    (uint32_t *)sinewave_left,
+                                    60,
+                                    DAC_ALIGN_12B_R
+                                   ) != HAL_OK)
+              {
+                /* DAC conversion start error */
+                Error_Handler();
+              }
+
+    //GenerateLeftSineWave(300);
+    //GenerateRightSineWave(300);
 
   /* USER CODE END 2 */
 
@@ -320,7 +335,7 @@ static void MX_DAC1_Init(void)
     Error_Handler();
   }
 
-  /** DAC channel OUT2 config
+  /** DAC channel OUT1 config
   */
   sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
   sConfig.DAC_DMADoubleDataMode = DISABLE;
@@ -331,6 +346,13 @@ static void MX_DAC1_Init(void)
   sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
   sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
   sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** DAC channel OUT2 config
+  */
   if (HAL_DAC_ConfigChannel(&hdac1, &sConfig, DAC_CHANNEL_2) != HAL_OK)
   {
     Error_Handler();
@@ -405,9 +427,9 @@ static void MX_TIM3_Init(void)
 
   /* USER CODE END TIM3_Init 1 */
   htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 159;
+  htim3.Init.Prescaler = 15999;
   htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 99;
+  htim3.Init.Period = 9;
   htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
@@ -448,6 +470,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel2_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
+  /* DMA1_Channel3_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 
 }
 
@@ -507,16 +532,6 @@ void GenerateRightSineWave(uint16_t amplitude)
     }
 }
 
-float normalize_sensor0(uint16_t s0)
-{
-    return ((float)s0 - 600.0f) / (4000.0f - 600.0f);
-}
-
-float normalize_sensor1(uint16_t s1)
-{
-    return (2500.0f - (float)s1) / (2500.0f - 10.0f);
-}
-
 int16_t calculate_error(uint16_t s0, uint16_t s1)
 {
 	// magnetic tape is there
@@ -532,16 +547,49 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
         uint16_t s0 = adc_buffer[0];
         uint16_t s1 = adc_buffer[1];
+
 		// if error < 0: magnetic tape to the left
 		// if error > 1: magnetic tape to the right
         int16_t error = calculate_error(s0, s1);
+        uint16_t amp = (uint16_t)(abs(error) / 3);
         if (error == 9999) {
         	GenerateRightSineWave(0);
         	GenerateLeftSineWave(0);
         }
-        if (error < 0){
-        	GenerateRightSineWave(abs(error) * 0.3);
+        else if (error < 0){
+        	GenerateRightSineWave(amp); // this was right
+        	GenerateLeftSineWave(0);
+        } else {
+        	GenerateLeftSineWave(amp);
+        	GenerateRightSineWave(0);
         }
+
+    }
+}
+
+void UpdateLeftAmplitude(uint16_t amp)
+{
+    for(int i=0; i<SAMPLES; i++)
+    {
+        int32_t centered =
+            ((int32_t)sinewave[i] - 2048);
+
+        sinewave_left[i] =
+            DAC_CENTER +
+            (centered * amp) / 2048;
+    }
+}
+
+void UpdateRightAmplitude(uint16_t amp)
+{
+    for(int i=0; i<SAMPLES; i++)
+    {
+        int32_t centered =
+            ((int32_t)sinewave[i]);
+
+        sinewave_right[i] =
+            DAC_CENTER +
+            (centered * amp);
     }
 }
 /* USER CODE END 4 */
