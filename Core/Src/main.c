@@ -53,8 +53,10 @@ ADC_HandleTypeDef hadc1;
 DMA_HandleTypeDef hdma_adc1;
 
 DAC_HandleTypeDef hdac1;
+DAC_HandleTypeDef hdac2;
 DMA_HandleTypeDef hdma_dac1_ch2;
 DMA_HandleTypeDef hdma_dac1_ch1;
+DMA_HandleTypeDef hdma_dac2_ch1;
 
 TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
@@ -73,7 +75,7 @@ uint16_t sinewave[60] = {
 
 uint16_t sinewave_left[SAMPLES];
 uint16_t sinewave_right[SAMPLES];
-
+uint16_t sinewave_center[SAMPLES];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -84,9 +86,11 @@ static void MX_ADC1_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_TIM3_Init(void);
+static void MX_DAC2_Init(void);
 /* USER CODE BEGIN PFP */
 void GenerateLeftSineWave(uint16_t amplitude);
 void GenerateRightSineWave(uint16_t amplitude);
+void GenerateCenterSineWave(uint16_t amplitude);
 float normalize_sensor0(uint16_t s0);
 float normalize_sensor1(uint16_t s1);
 int16_t calculate_error(uint16_t s0, uint16_t s1);
@@ -105,7 +109,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-
+	GenerateCenterSineWave(150);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -131,6 +135,7 @@ int main(void)
   MX_DAC1_Init();
   MX_TIM2_Init();
   MX_TIM3_Init();
+  MX_DAC2_Init();
   /* USER CODE BEGIN 2 */
   //HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
 
@@ -173,8 +178,20 @@ int main(void)
                 Error_Handler();
               }
 
+
+    if (HAL_DAC_Start_DMA(&hdac2, DAC_CHANNEL_1,
+                                        (uint32_t *)sinewave_center,
+                                        60,
+                                        DAC_ALIGN_12B_R
+                                       ) != HAL_OK)
+                  {
+                    // DAC conversion start error
+                    Error_Handler();
+                  }
+
     //GenerateLeftSineWave(300);
     //GenerateRightSineWave(300);
+
 
   /* USER CODE END 2 */
 
@@ -364,6 +381,53 @@ static void MX_DAC1_Init(void)
 }
 
 /**
+  * @brief DAC2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_DAC2_Init(void)
+{
+
+  /* USER CODE BEGIN DAC2_Init 0 */
+
+  /* USER CODE END DAC2_Init 0 */
+
+  DAC_ChannelConfTypeDef sConfig = {0};
+
+  /* USER CODE BEGIN DAC2_Init 1 */
+
+  /* USER CODE END DAC2_Init 1 */
+
+  /** DAC Initialization
+  */
+  hdac2.Instance = DAC2;
+  if (HAL_DAC_Init(&hdac2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+
+  /** DAC channel OUT1 config
+  */
+  sConfig.DAC_HighFrequency = DAC_HIGH_FREQUENCY_INTERFACE_MODE_AUTOMATIC;
+  sConfig.DAC_DMADoubleDataMode = DISABLE;
+  sConfig.DAC_SignedFormat = DISABLE;
+  sConfig.DAC_SampleAndHold = DAC_SAMPLEANDHOLD_DISABLE;
+  sConfig.DAC_Trigger = DAC_TRIGGER_T2_TRGO;
+  sConfig.DAC_Trigger2 = DAC_TRIGGER_NONE;
+  sConfig.DAC_OutputBuffer = DAC_OUTPUTBUFFER_ENABLE;
+  sConfig.DAC_ConnectOnChipPeripheral = DAC_CHIPCONNECT_EXTERNAL;
+  sConfig.DAC_UserTrimming = DAC_TRIMMING_FACTORY;
+  if (HAL_DAC_ConfigChannel(&hdac2, &sConfig, DAC_CHANNEL_1) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN DAC2_Init 2 */
+
+  /* USER CODE END DAC2_Init 2 */
+
+}
+
+/**
   * @brief TIM2 Initialization Function
   * @param None
   * @retval None
@@ -465,14 +529,8 @@ static void MX_DMA_Init(void)
 
   /* DMA interrupt init */
   /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 0, 0);
+  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 2, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-  /* DMA1_Channel2_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel2_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel2_IRQn);
-  /* DMA1_Channel3_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
 
 }
 
@@ -529,6 +587,27 @@ void GenerateRightSineWave(uint16_t amplitude)
             value = 0;
 
         sinewave_right[i] = (uint16_t)value;
+    }
+}
+
+void GenerateCenterSineWave(uint16_t amplitude)
+{
+    for(int i = 0; i < SAMPLES; i++)
+    {
+        int32_t centered;
+        int32_t value;
+
+        centered = (int32_t)sinewave[i] - 2048;
+
+        value = 2048 + ((centered * amplitude) / 2048);
+
+        if(value > 4095)
+            value = 4095;
+
+        if(value < 0)
+            value = 0;
+
+        sinewave_center[i] = (uint16_t)value;
     }
 }
 
