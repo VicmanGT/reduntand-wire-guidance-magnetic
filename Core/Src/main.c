@@ -558,9 +558,12 @@ void GenerateLeftSineWave(uint16_t amplitude)
 {
     for(int i = 0; i < SAMPLES; i++)
     {
-        float angle = 2.0f * PI * i / SAMPLES;
+        int32_t centered;
+        int32_t value;
 
-        float value = DAC_CENTER + amplitude * sinf(angle);
+        centered = (int32_t)sinewave[i] - 2048;
+
+        value = 2048 + ((centered * amplitude) / 2048);
 
         if(value > DAC_MAX)
             value = DAC_MAX;
@@ -576,9 +579,12 @@ void GenerateRightSineWave(uint16_t amplitude)
 {
     for(int i = 0; i < SAMPLES; i++)
     {
-        float angle = 2.0f * PI * i / SAMPLES;
+        int32_t centered;
+        int32_t value;
 
-        float value = DAC_CENTER + amplitude * sinf(angle);
+        centered = (int32_t)sinewave[i] - 2048;
+
+        value = 2048 + ((centered * amplitude) / 2048);
 
         if(value > DAC_MAX)
             value = DAC_MAX;
