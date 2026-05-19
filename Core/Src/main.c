@@ -64,7 +64,7 @@ TIM_HandleTypeDef htim2;
 TIM_HandleTypeDef htim3;
 
 /* USER CODE BEGIN PV */
-volatile uint16_t adc_buffer[2];
+volatile uint16_t adc_buffer_magnetic[2];
 volatile uint16_t adc_buffer_wire[3];
 
 HAL_StatusTypeDef status;
@@ -144,7 +144,7 @@ int main(void)
   /* USER CODE BEGIN 2 */
   //HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
 
-  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, 2) != HAL_OK)
+  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer_magnetic, 2) != HAL_OK)
         {
           /* Counter enable error */
           Error_Handler();
@@ -716,23 +716,44 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if(htim->Instance == TIM3)
     {
-        uint16_t s0 = adc_buffer[0];
-        uint16_t s1 = adc_buffer[1];
+        uint16_t s0 = adc_buffer_magnetic[0];
+        uint16_t s1 = adc_buffer_magnetic[1];
 
-		// if error < 0: magnetic tape to the left
-		// if error > 1: magnetic tape to the right
-        int16_t error = calculate_error(s0, s1);
-        uint16_t amp = (uint16_t)(abs(error) / 3);
-        if (error == 9999) {
-        	GenerateRightSineWave(0);
-        	GenerateLeftSineWave(0);
+        uint16_t left = adc_buffer_wire[0];
+        uint16_t center = adc_buffer_wire[1];
+        uint16_t right = adc_buffer_wire[2];
+
+        if (center > 500) {
+        	if (left < 50) left = 50;
+        	if (right < 50) right = 50;
+        	uint16_t l_amp = (uint16_t)(abs(left) / 4);
+        	uint16_t r_amp = (uint16_t)(abs(right) / 4);
+        	GenerateRightSineWave(r_amp);
+        	GenerateLeftSineWave(l_amp);
+
+        } else if (center > 0) {
+
+        	int16_t error = calculate_error(s0, s1);
+
+        	// if error < 0: magnetic tape to the left
+        	// if error > 1: magnetic tape to the right
+        	uint16_t amp = (uint16_t)(abs(error) / 5);
+        	if (amp < 50) amp = 50;
+        	if (error == 9999) {
+        		GenerateRightSineWave(0);
+        		GenerateLeftSineWave(0);
         }
-        else if (error < 0){
-        	GenerateRightSineWave(amp); // this was right
-        	GenerateLeftSineWave(0);
+        	else if (error < 0){
+        		GenerateRightSineWave(amp); // this was right
+        		GenerateLeftSineWave(50);
+        	} else {
+        		GenerateLeftSineWave(amp);
+        		GenerateRightSineWave(50);
+        	}
+
         } else {
-        	GenerateLeftSineWave(amp);
-        	GenerateRightSineWave(0);
+        	GenerateRightSineWave(50);
+        	GenerateLeftSineWave(50);
         }
 
     }
