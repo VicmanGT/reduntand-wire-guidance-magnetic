@@ -144,7 +144,11 @@ int main(void)
   /* USER CODE BEGIN 2 */
   //HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
 
-  status = HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, 2);
+  if (HAL_ADC_Start_DMA(&hadc1, (uint32_t*)adc_buffer, 2) != HAL_OK)
+        {
+          /* Counter enable error */
+          Error_Handler();
+        }
 
   if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer_wire, 3) != HAL_OK)
       {
@@ -361,7 +365,7 @@ static void MX_ADC2_Init(void)
   hadc2.Init.DataAlign = ADC_DATAALIGN_RIGHT;
   hadc2.Init.GainCompensation = 0;
   hadc2.Init.ScanConvMode = ADC_SCAN_ENABLE;
-  hadc2.Init.EOCSelection = ADC_EOC_SEQ_CONV;
+  hadc2.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc2.Init.LowPowerAutoWait = DISABLE;
   hadc2.Init.ContinuousConvMode = ENABLE;
   hadc2.Init.NbrOfConversion = 3;
@@ -612,14 +616,6 @@ static void MX_DMA_Init(void)
   /* DMA controller clock enable */
   __HAL_RCC_DMAMUX1_CLK_ENABLE();
   __HAL_RCC_DMA1_CLK_ENABLE();
-
-  /* DMA interrupt init */
-  /* DMA1_Channel1_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel1_IRQn, 2, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel1_IRQn);
-  /* DMA1_Channel5_IRQn interrupt configuration */
-  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 2, 0);
-  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
 
 }
 
