@@ -30,7 +30,11 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
-
+typedef struct {
+    float right;
+    float left;
+    float center;
+} CoilDistances;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -44,6 +48,8 @@
 #define DAC_CENTER 3102 // 2.5 V
 #define DAC_MAX 3722 // 2.5 V + 500mV = 3V
 #define PI 3.14159265f
+#define SAMPLES_PER_CHANNEL 1024
+#define ADC_BUFFER_SIZE 3072
 
 
 /* USER CODE END PM */
@@ -66,6 +72,8 @@ TIM_HandleTypeDef htim3;
 /* USER CODE BEGIN PV */
 volatile uint16_t adc_buffer_magnetic[2];
 volatile uint16_t adc_buffer_wire[3];
+
+volatile uint16_t adc_buffer_wire_sin[ADC_BUFFER_SIZE];
 
 HAL_StatusTypeDef status;
 
@@ -150,7 +158,7 @@ int main(void)
           Error_Handler();
         }
 
-  if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer_wire, 3) != HAL_OK)
+  if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer_wire_sin, 3) != HAL_OK)
       {
         /* Counter enable error */
         Error_Handler();
@@ -712,6 +720,27 @@ int16_t calculate_error(uint16_t s0, uint16_t s1)
 	else return 9999;
 }
 
+CoilDistances calculate_avgs(){
+	uint32_t sum1 = 0;
+	uint32_t sum2 = 0;
+	uint32_t sum3 = 0;
+
+	CoilDistances result;
+
+	for(int i = 0; i < ADC_BUFFER_SIZE; i += 3)
+	{
+	    sum1 += adc_buffer_wire_sin[i];
+	    sum2 += adc_buffer_wire_sin[i + 1];
+	    sum3 += adc_buffer_wire_sin[i + 2];
+	}
+
+	result.right = (float)sum1 / SAMPLES_PER_CHANNEL;
+	result.left = (float)sum2 / SAMPLES_PER_CHANNEL;
+	result.center = (float)sum3 / SAMPLES_PER_CHANNEL;
+
+	return result;
+}
+
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 {
     if(htim->Instance == TIM3)
@@ -719,19 +748,17 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         uint16_t s0 = adc_buffer_magnetic[0];
         uint16_t s1 = adc_buffer_magnetic[1];
 
-        uint16_t left = adc_buffer_wire[0];
-        uint16_t center = adc_buffer_wire[1];
-        uint16_t right = adc_buffer_wire[2];
+        CoilDistances coil_distances = calculate_avgs();
 
-        if (center > 500) {
-        	if (left < 50) left = 50;
-        	if (right < 50) right = 50;
-        	uint16_t l_amp = (uint16_t)(abs(left) / 4);
-        	uint16_t r_amp = (uint16_t)(abs(right) / 4);
+        if (coil_distances.center > 500) {
+        	if (coil_distances.left < 50) coil_distances.left = 50;
+        	if (coil_distances.right < 50) coil_distances.right = 50;
+        	uint16_t l_amp = (uint16_t)(abs(coil_distances.left) / 4);
+        	uint16_t r_amp = (uint16_t)(abs(coil_distances.right) / 4);
         	GenerateRightSineWave(r_amp);
         	GenerateLeftSineWave(l_amp);
 
-        } else if (center > 0) {
+        } else if (coil_distances.center > 0) {
 
         	int16_t error = calculate_error(s0, s1);
 
@@ -742,7 +769,7 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         	if (error == 9999) {
         		GenerateRightSineWave(0);
         		GenerateLeftSineWave(0);
-        }
+        	}
         	else if (error < 0){
         		GenerateRightSineWave(amp); // this was right
         		GenerateLeftSineWave(50);
@@ -752,36 +779,10 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         	}
 
         } else {
-        	GenerateRightSineWave(50);
-        	GenerateLeftSineWave(50);
+        	GenerateRightSineWave(0);
+        	GenerateLeftSineWave(0);
         }
 
-    }
-}
-
-void UpdateLeftAmplitude(uint16_t amp)
-{
-    for(int i=0; i<SAMPLES; i++)
-    {
-        int32_t centered =
-            ((int32_t)sinewave[i] - 2048);
-
-        sinewave_left[i] =
-            DAC_CENTER +
-            (centered * amp) / 2048;
-    }
-}
-
-void UpdateRightAmplitude(uint16_t amp)
-{
-    for(int i=0; i<SAMPLES; i++)
-    {
-        int32_t centered =
-            ((int32_t)sinewave[i]);
-
-        sinewave_right[i] =
-            DAC_CENTER +
-            (centered * amp);
     }
 }
 /* USER CODE END 4 */
