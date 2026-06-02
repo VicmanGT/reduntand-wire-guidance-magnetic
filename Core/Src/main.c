@@ -35,6 +35,8 @@ typedef struct {
     float left;
     float center;
 } CoilDistances;
+
+CoilDistances coil_distance;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -158,7 +160,7 @@ int main(void)
           Error_Handler();
         }
 
-  if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer_wire_sin, 3) != HAL_OK)
+  if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer_wire_sin, ADC_BUFFER_SIZE) != HAL_OK)
       {
         /* Counter enable error */
         Error_Handler();
@@ -625,6 +627,11 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMAMUX1_CLK_ENABLE();
   __HAL_RCC_DMA1_CLK_ENABLE();
 
+  /* DMA interrupt init */
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
+
 }
 
 /**
@@ -725,7 +732,6 @@ CoilDistances calculate_avgs(){
 	uint32_t sum2 = 0;
 	uint32_t sum3 = 0;
 
-	CoilDistances result;
 
 	for(int i = 0; i < ADC_BUFFER_SIZE; i += 3)
 	{
@@ -734,11 +740,10 @@ CoilDistances calculate_avgs(){
 	    sum3 += adc_buffer_wire_sin[i + 2];
 	}
 
-	result.right = (float)sum1 / SAMPLES_PER_CHANNEL;
-	result.left = (float)sum2 / SAMPLES_PER_CHANNEL;
-	result.center = (float)sum3 / SAMPLES_PER_CHANNEL;
+	coil_distance.right = (float)sum1 / SAMPLES_PER_CHANNEL;
+	coil_distance.left = (float)sum2 / SAMPLES_PER_CHANNEL;
+	coil_distance.center = (float)sum3 / SAMPLES_PER_CHANNEL;
 
-	return result;
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -785,6 +790,41 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
     }
 }
+
+void UpdateLeftAmplitude(uint16_t amp)
+{
+    for(int i=0; i<SAMPLES; i++)
+    {
+        int32_t centered =
+            ((int32_t)sinewave[i] - 2048);
+
+        sinewave_left[i] =
+            DAC_CENTER +
+            (centered * amp) / 2048;
+    }
+}
+
+void UpdateRightAmplitude(uint16_t amp)
+{
+    for(int i=0; i<SAMPLES; i++)
+    {
+        int32_t centered =
+            ((int32_t)sinewave[i]);
+
+        sinewave_right[i] =
+            DAC_CENTER +
+            (centered * amp);
+    }
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+    if(hadc->Instance == ADC2)
+    {
+    	calculate_avgs();
+    }
+}
+
 /* USER CODE END 4 */
 
 /**
