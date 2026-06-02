@@ -759,31 +759,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     }
 }
 
-void UpdateLeftAmplitude(uint16_t amp)
-{
-    for(int i=0; i<SAMPLES; i++)
-    {
-        int32_t centered =
-            ((int32_t)sinewave[i] - 2048);
-
-        sinewave_left[i] =
-            DAC_CENTER +
-            (centered * amp) / 2048;
-    }
-}
-
-void UpdateRightAmplitude(uint16_t amp)
-{
-    for(int i=0; i<SAMPLES; i++)
-    {
-        int32_t centered =
-            ((int32_t)sinewave[i]);
-
-        sinewave_right[i] =
-            DAC_CENTER +
-            (centered * amp);
-    }
-}
 /* USER CODE END 4 */
 
 /**
