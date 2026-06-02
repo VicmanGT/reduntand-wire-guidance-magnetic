@@ -731,29 +731,25 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         	GenerateRightSineWave(r_amp);
         	GenerateLeftSineWave(l_amp);
 
-        } else if (center > 0) {
+        } else {
 
-        	int16_t error = calculate_error(s0, s1);
-
-        	// if error < 0: magnetic tape to the left
-        	// if error > 1: magnetic tape to the right
-        	uint16_t amp = (uint16_t)(abs(error) / 5);
-        	if (amp < 50) amp = 50;
-        	if (error == 9999) {
-        		GenerateRightSineWave(0);
-        		GenerateLeftSineWave(0);
-        }
-        	else if (error < 0){
-        		GenerateRightSineWave(amp); // this was right
-        		GenerateLeftSineWave(50);
-        	} else {
-        		GenerateLeftSineWave(amp);
-        		GenerateRightSineWave(50);
+        		int16_t error = calculate_error(s0, s1);
+        		// if error < 0: magnetic tape to the left
+        		// if error > 1: magnetic tape to the right
+        		uint16_t amp = (uint16_t)(abs(error) / 5);
+        		if (amp < 50) amp = 50;
+        		if (error == 9999) {
+        			GenerateRightSineWave(0);
+        			GenerateLeftSineWave(0);
+        		}
+        		else if (error < 0){
+        			GenerateRightSineWave(amp); // this was right
+        			GenerateLeftSineWave(50);
+        		} else {
+        			GenerateLeftSineWave(amp);
+        			GenerateRightSineWave(50);
         	}
 
-        } else {
-        	GenerateRightSineWave(50);
-        	GenerateLeftSineWave(50);
         }
 
     }
