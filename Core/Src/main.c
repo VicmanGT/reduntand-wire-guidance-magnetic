@@ -727,7 +727,7 @@ int16_t calculate_error(uint16_t s0, uint16_t s1)
 	else return 9999;
 }
 
-CoilDistances calculate_avgs(){
+void calculate_avgs(){
 	uint32_t sum1 = 0;
 	uint32_t sum2 = 0;
 	uint32_t sum3 = 0;
@@ -752,18 +752,20 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     {
         uint16_t s0 = adc_buffer_magnetic[0];
         uint16_t s1 = adc_buffer_magnetic[1];
+        uint16_t l_amp;
+        uint16_t r_amp;
 
-        CoilDistances coil_distances = calculate_avgs();
+        if (coil_distance.right > 750 || coil_distance.left > 750) {
+        	if (coil_distance.left < 50)
+        		l_amp = 50;
+        	 else l_amp = (uint16_t)(abs(coil_distance.left) / 4);
+        	if (coil_distance.right < 50) r_amp = 50;
+        	else r_amp = (uint16_t)(abs(coil_distance.right) / 4);
 
-        if (coil_distances.center > 500) {
-        	if (coil_distances.left < 50) coil_distances.left = 50;
-        	if (coil_distances.right < 50) coil_distances.right = 50;
-        	uint16_t l_amp = (uint16_t)(abs(coil_distances.left) / 4);
-        	uint16_t r_amp = (uint16_t)(abs(coil_distances.right) / 4);
         	GenerateRightSineWave(r_amp);
         	GenerateLeftSineWave(l_amp);
 
-        } else if (coil_distances.center > 0) {
+        } else {
 
         	int16_t error = calculate_error(s0, s1);
 
@@ -783,9 +785,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
         		GenerateRightSineWave(50);
         	}
 
-        } else {
-        	GenerateRightSineWave(0);
-        	GenerateLeftSineWave(0);
         }
 
     }
