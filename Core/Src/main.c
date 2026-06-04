@@ -30,7 +30,13 @@
 
 /* Private typedef -----------------------------------------------------------*/
 /* USER CODE BEGIN PTD */
+typedef struct {
+    float right;
+    float left;
+    float center;
+} CoilDistances;
 
+CoilDistances coil_distance;
 /* USER CODE END PTD */
 
 /* Private define ------------------------------------------------------------*/
@@ -44,6 +50,8 @@
 #define DAC_CENTER 3102 // 2.5 V
 #define DAC_MAX 3722 // 2.5 V + 500mV = 3V
 #define PI 3.14159265f
+#define SAMPLES_PER_CHANNEL 1024
+#define ADC_BUFFER_SIZE 3072
 
 
 /* USER CODE END PM */
@@ -66,6 +74,8 @@ TIM_HandleTypeDef htim3;
 /* USER CODE BEGIN PV */
 volatile uint16_t adc_buffer_magnetic[2];
 volatile uint16_t adc_buffer_wire[3];
+
+volatile uint16_t adc_buffer_wire_sin[ADC_BUFFER_SIZE];
 
 HAL_StatusTypeDef status;
 
@@ -97,7 +107,7 @@ void GenerateRightSineWave(uint16_t amplitude);
 void GenerateCenterSineWave(uint16_t amplitude);
 float normalize_sensor0(uint16_t s0);
 float normalize_sensor1(uint16_t s1);
-int16_t calculate_error(uint16_t s0, uint16_t s1);
+int16_t calculate_error(uint16_t s0);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -113,7 +123,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	GenerateCenterSineWave(150);
+	GenerateCenterSineWave(300);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -150,7 +160,7 @@ int main(void)
           Error_Handler();
         }
 
-  if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer_wire, 3) != HAL_OK)
+  if (HAL_ADC_Start_DMA(&hadc2, (uint32_t*)adc_buffer_wire_sin, ADC_BUFFER_SIZE) != HAL_OK)
       {
         /* Counter enable error */
         Error_Handler();
@@ -617,6 +627,11 @@ static void MX_DMA_Init(void)
   __HAL_RCC_DMAMUX1_CLK_ENABLE();
   __HAL_RCC_DMA1_CLK_ENABLE();
 
+  /* DMA interrupt init */
+  /* DMA1_Channel5_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel5_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel5_IRQn);
+
 }
 
 /**
@@ -703,13 +718,31 @@ void GenerateCenterSineWave(uint16_t amplitude)
     }
 }
 
-int16_t calculate_error(uint16_t s0, uint16_t s1)
+int16_t calculate_error(uint16_t s0)
 {
 	// magnetic tape is there
-	if (s1 > 2200 ) return 2000 - s0;
+	return 2085 - s0;
 		// if diff0 < 0: magnetic tape to the left
 		// if diff1 > 1: magnetic tape to the right
-	else return 9999;
+}
+
+void calculate_avgs(){
+	uint32_t sum1 = 0;
+	uint32_t sum2 = 0;
+	uint32_t sum3 = 0;
+
+
+	for(int i = 0; i < ADC_BUFFER_SIZE; i += 3)
+	{
+	    sum1 += adc_buffer_wire_sin[i];
+	    sum2 += adc_buffer_wire_sin[i + 1];
+	    sum3 += adc_buffer_wire_sin[i + 2];
+	}
+
+	coil_distance.right = (float)sum1 / SAMPLES_PER_CHANNEL;
+	coil_distance.left = (float)sum2 / SAMPLES_PER_CHANNEL;
+	coil_distance.center = (float)sum3 / SAMPLES_PER_CHANNEL;
+
 }
 
 void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
@@ -717,41 +750,49 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if(htim->Instance == TIM3)
     {
         uint16_t s0 = adc_buffer_magnetic[0];
-        uint16_t s1 = adc_buffer_magnetic[1];
+        uint16_t l_amp;
+        uint16_t r_amp;
 
-        uint16_t left = adc_buffer_wire[0];
-        uint16_t center = adc_buffer_wire[1];
-        uint16_t right = adc_buffer_wire[2];
+        if (coil_distance.right > 750 || coil_distance.left > 750) {
+        	if (coil_distance.left < 50)
+        		l_amp = 50;
+        	 else l_amp = (uint16_t)(abs(coil_distance.left) / 5);
+        	if (coil_distance.right < 50) r_amp = 50;
+        	else r_amp = (uint16_t)(abs(coil_distance.right) / 5);
 
-        if (center > 500) {
-        	if (left < 50) left = 50;
-        	if (right < 50) right = 50;
-        	uint16_t l_amp = (uint16_t)(abs(left) / 4);
-        	uint16_t r_amp = (uint16_t)(abs(right) / 4);
         	GenerateRightSineWave(r_amp);
         	GenerateLeftSineWave(l_amp);
 
         } else {
 
-        		int16_t error = calculate_error(s0, s1);
-        		// if error < 0: magnetic tape to the left
-        		// if error > 1: magnetic tape to the right
-        		uint16_t amp = (uint16_t)(abs(error) / 5);
-        		if (amp < 50) amp = 50;
-        		if (error == 9999) {
-        			GenerateRightSineWave(0);
-        			GenerateLeftSineWave(0);
-        		}
-        		else if (error < 0){
-        			GenerateRightSineWave(amp); // this was right
-        			GenerateLeftSineWave(50);
-        		} else {
-        			GenerateLeftSineWave(amp);
-        			GenerateRightSineWave(50);
+        	int16_t error = calculate_error(s0);
+
+        	// if error < 0: magnetic tape to the left
+        	// if error > 1: magnetic tape to the right
+        	uint16_t amp = (uint16_t)(abs(error) / 3);
+        	if (amp < 50) amp = 50;
+        	if (error == 9999) {
+        		GenerateRightSineWave(0);
+        		GenerateLeftSineWave(0);
+        	}
+        	else if (error < 0){
+        		GenerateRightSineWave(amp); // this was right
+        		GenerateLeftSineWave(50);
+        	} else {
+        		GenerateLeftSineWave(amp);
+        		GenerateRightSineWave(50);
         	}
 
         }
 
+    }
+}
+
+void HAL_ADC_ConvCpltCallback(ADC_HandleTypeDef *hadc)
+{
+    if(hadc->Instance == ADC2)
+    {
+    	calculate_avgs();
     }
 }
 
