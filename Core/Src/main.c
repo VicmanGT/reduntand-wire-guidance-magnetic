@@ -107,7 +107,7 @@ void GenerateRightSineWave(uint16_t amplitude);
 void GenerateCenterSineWave(uint16_t amplitude);
 float normalize_sensor0(uint16_t s0);
 float normalize_sensor1(uint16_t s1);
-int16_t calculate_error(uint16_t s0, uint16_t s1);
+int16_t calculate_error(uint16_t s0);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -123,7 +123,7 @@ int main(void)
 {
 
   /* USER CODE BEGIN 1 */
-	GenerateCenterSineWave(150);
+	GenerateCenterSineWave(300);
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -718,13 +718,12 @@ void GenerateCenterSineWave(uint16_t amplitude)
     }
 }
 
-int16_t calculate_error(uint16_t s0, uint16_t s1)
+int16_t calculate_error(uint16_t s0)
 {
 	// magnetic tape is there
-	if (s1 > 2200 ) return 2000 - s0;
+	return 2085 - s0;
 		// if diff0 < 0: magnetic tape to the left
 		// if diff1 > 1: magnetic tape to the right
-	else return 9999;
 }
 
 void calculate_avgs(){
@@ -751,27 +750,26 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
     if(htim->Instance == TIM3)
     {
         uint16_t s0 = adc_buffer_magnetic[0];
-        uint16_t s1 = adc_buffer_magnetic[1];
         uint16_t l_amp;
         uint16_t r_amp;
 
         if (coil_distance.right > 750 || coil_distance.left > 750) {
         	if (coil_distance.left < 50)
         		l_amp = 50;
-        	 else l_amp = (uint16_t)(abs(coil_distance.left) / 4);
+        	 else l_amp = (uint16_t)(abs(coil_distance.left) / 5);
         	if (coil_distance.right < 50) r_amp = 50;
-        	else r_amp = (uint16_t)(abs(coil_distance.right) / 4);
+        	else r_amp = (uint16_t)(abs(coil_distance.right) / 5);
 
         	GenerateRightSineWave(r_amp);
         	GenerateLeftSineWave(l_amp);
 
         } else {
 
-        	int16_t error = calculate_error(s0, s1);
+        	int16_t error = calculate_error(s0);
 
         	// if error < 0: magnetic tape to the left
         	// if error > 1: magnetic tape to the right
-        	uint16_t amp = (uint16_t)(abs(error) / 5);
+        	uint16_t amp = (uint16_t)(abs(error) / 3);
         	if (amp < 50) amp = 50;
         	if (error == 9999) {
         		GenerateRightSineWave(0);
@@ -787,32 +785,6 @@ void HAL_TIM_PeriodElapsedCallback(TIM_HandleTypeDef *htim)
 
         }
 
-    }
-}
-
-void UpdateLeftAmplitude(uint16_t amp)
-{
-    for(int i=0; i<SAMPLES; i++)
-    {
-        int32_t centered =
-            ((int32_t)sinewave[i] - 2048);
-
-        sinewave_left[i] =
-            DAC_CENTER +
-            (centered * amp) / 2048;
-    }
-}
-
-void UpdateRightAmplitude(uint16_t amp)
-{
-    for(int i=0; i<SAMPLES; i++)
-    {
-        int32_t centered =
-            ((int32_t)sinewave[i]);
-
-        sinewave_right[i] =
-            DAC_CENTER +
-            (centered * amp);
     }
 }
 
